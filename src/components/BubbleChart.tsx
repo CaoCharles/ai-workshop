@@ -93,6 +93,20 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
     const centerStrength = (axis: number) => (n: Node) =>
       axis * (0.25 + 0.75 * (n.r / maxR));
 
+    // 把「回答數最高」的泡泡釘死在正中心，當作視覺焦點，其餘繞著它排列。
+    const topNode = seedNodes.reduce(
+      (a, b) => (b.count > a.count ? b : a),
+      seedNodes[0]
+    );
+    for (const n of seedNodes) {
+      n.fx = undefined;
+      n.fy = undefined;
+    }
+    topNode.x = size.w / 2;
+    topNode.y = size.h / 2;
+    topNode.fx = size.w / 2;
+    topNode.fy = size.h / 2;
+
     // 自訂力：滑鼠靠近時把附近泡泡推開，產生互動的「撥開」效果。
     let simNodes: Node[] = seedNodes;
     const mouseRepel = (alpha: number) => {
