@@ -27,12 +27,13 @@ export default function ResultsPage() {
 
   useEffect(() => {
     load();
-    // Supabase Realtime：有新資料 insert 時自動重抓，氣泡圖即時長出。
+    // Supabase Realtime：監聽所有變更（新增 + 刪除），
+    // 學員送出時氣泡即時長出；後台重設清空時，畫面也會即時歸零。
     const channel = supabase
       .channel("responses-stream")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "responses" },
+        { event: "*", schema: "public", table: "responses" },
         () => load()
       )
       .subscribe();
