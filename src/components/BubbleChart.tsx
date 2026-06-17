@@ -52,7 +52,7 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
 
     // 依「容器面積」自動換算半徑：泡泡越多顆，每顆就越小，總面積維持在容器的一定比例內，
     // 這樣不管 1 顆還是 30 顆都不會爆出框。半徑正比於 sqrt(count)（面積正比於 count）。
-    const fill = 0.62; // 泡泡總面積約佔容器的 62%
+    const fill = 0.5; // 泡泡總面積約佔容器的 50%，留出間隙避免擁擠重疊
     const k = Math.sqrt((fill * size.w * size.h) / (Math.PI * totalCount));
     const minR = Math.max(16, Math.min(size.w, size.h) / 16);
     const maxR = Math.min(size.w, size.h) / 3;
@@ -79,11 +79,14 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
       n.y = Math.max(n.r + pad, Math.min(size.h - n.r - pad, n.y ?? size.h / 2));
     };
     const sim = forceSimulation<Node>(seedNodes)
-      .force("charge", forceManyBody().strength(3))
+      // 負的電荷力 = 互相排斥，讓泡泡散開（先前用正值會把它們吸成一團而重疊）。
+      .force("charge", forceManyBody().strength(-12))
       .force("center", forceCenter(size.w / 2, size.h / 2))
-      .force("x", forceX(size.w / 2).strength(0.08))
-      .force("y", forceY(size.h / 2).strength(0.12))
-      .force("collide", forceCollide<Node>((d) => d.r + 3).iterations(4))
+      // 置中力放弱（x 比 y 更弱），讓泡泡往左右攤開、填滿寬度。
+      .force("x", forceX(size.w / 2).strength(0.02))
+      .force("y", forceY(size.h / 2).strength(0.06))
+      // 防重疊力拉滿，確保泡泡彼此不交疊。
+      .force("collide", forceCollide<Node>((d) => d.r + 2).strength(1).iterations(5))
       .on("tick", () => {
         for (const n of sim.nodes()) clamp(n);
         setNodes([...sim.nodes()]);
