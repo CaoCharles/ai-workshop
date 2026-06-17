@@ -64,7 +64,7 @@ export default function ResultsPage() {
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl sm:text-4xl font-bold text-brand">
-              大家的 AI 專案關鍵詞
+              大家最想用 AI 解決的痛點
             </h1>
             <p className="mt-2 text-brand-dark/60">
               共 {total} 份回答 · 顯示前 {TOP_N} 名 · 即時更新

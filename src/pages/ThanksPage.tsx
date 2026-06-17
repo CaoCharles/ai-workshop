@@ -9,7 +9,7 @@ export default function ThanksPage() {
           謝謝你的回答！
         </h1>
         <p className="mt-3 text-lg text-brand-dark/70">
-          你的關鍵詞已經加入現場的氣泡圖了。
+          你選的痛點已經加入現場的氣泡圖了。
         </p>
 
         <div className="mt-10 space-y-3">
