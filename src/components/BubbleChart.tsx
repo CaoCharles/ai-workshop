@@ -6,6 +6,7 @@ import {
   forceSimulation,
   forceX,
   forceY,
+  type Simulation,
   type SimulationNodeDatum,
 } from "d3-force";
 
@@ -30,6 +31,14 @@ function colorForCount(count: number, min: number, max: number): string {
 
 export default function BubbleChart({ data }: { data: Bubble[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const simRef = useRef<Simulation<Node, undefined> | null>(null);
+  // 滑鼠在圖上的位置，給「滑鼠推開泡泡」的互動力使用。
+  const mouseRef = useRef<{ x: number; y: number; active: boolean }>({
+    x: 0,
+    y: 0,
+    active: false,
+  });
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [nodes, setNodes] = useState<Node[]>([]);
 
@@ -78,24 +87,73 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
       n.x = Math.max(n.r + pad, Math.min(size.w - n.r - pad, n.x ?? size.w / 2));
       n.y = Math.max(n.r + pad, Math.min(size.h - n.r - pad, n.y ?? size.h / 2));
     };
+
+    const maxR = Math.max(...seedNodes.map((n) => n.r), 1);
+    // 半徑越大 → 置中力越強 → 越往中央集中；小泡泡置中力弱，被擠到外圈。
+    const centerStrength = (axis: number) => (n: Node) =>
+      axis * (0.25 + 0.75 * (n.r / maxR));
+
+    // 自訂力：滑鼠靠近時把附近泡泡推開，產生互動的「撥開」效果。
+    let simNodes: Node[] = seedNodes;
+    const mouseRepel = (alpha: number) => {
+      const m = mouseRef.current;
+      if (!m.active) return;
+      const R = Math.min(size.w, size.h) * 0.28; // 影響半徑
+      for (const n of simNodes) {
+        const dx = (n.x ?? 0) - m.x;
+        const dy = (n.y ?? 0) - m.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0 && dist < R) {
+          const push = ((R - dist) / R) * alpha * 18;
+          n.vx = (n.vx ?? 0) + (dx / dist) * push;
+          n.vy = (n.vy ?? 0) + (dy / dist) * push;
+        }
+      }
+    };
+    mouseRepel.initialize = (nds: Node[]) => {
+      simNodes = nds;
+    };
+
     const sim = forceSimulation<Node>(seedNodes)
       // 負的電荷力 = 互相排斥，讓泡泡散開（先前用正值會把它們吸成一團而重疊）。
       .force("charge", forceManyBody().strength(-12))
       .force("center", forceCenter(size.w / 2, size.h / 2))
-      // 置中力放弱（x 比 y 更弱），讓泡泡往左右攤開、填滿寬度。
-      .force("x", forceX(size.w / 2).strength(0.02))
-      .force("y", forceY(size.h / 2).strength(0.06))
+      // 置中力依泡泡大小調整（大的更往中間）。
+      .force("x", forceX<Node>(size.w / 2).strength(centerStrength(0.08)))
+      .force("y", forceY<Node>(size.h / 2).strength(centerStrength(0.12)))
       // 防重疊力拉滿，確保泡泡彼此不交疊。
       .force("collide", forceCollide<Node>((d) => d.r + 2).strength(1).iterations(5))
+      .force("mouse", mouseRepel)
+      .velocityDecay(0.3) // 阻尼小一點，移動更滑順有彈性
       .on("tick", () => {
         for (const n of sim.nodes()) clamp(n);
         setNodes([...sim.nodes()]);
       });
+    simRef.current = sim;
     sim.alpha(1).restart();
     return () => {
       sim.stop();
+      simRef.current = null;
     };
   }, [seedNodes, size.w, size.h]);
+
+  // 滑鼠在 SVG 上移動：更新座標並「加熱」模擬，讓泡泡持續動起來。
+  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    mouseRef.current = {
+      x: ((e.clientX - rect.left) / rect.width) * size.w,
+      y: ((e.clientY - rect.top) / rect.height) * size.h,
+      active: true,
+    };
+    const sim = simRef.current;
+    if (sim) sim.alphaTarget(0.3).restart();
+  }
+
+  function handlePointerLeave() {
+    mouseRef.current.active = false;
+    simRef.current?.alphaTarget(0); // 停止加熱，泡泡慢慢靜止
+  }
 
   if (data.length === 0) {
     return (
@@ -114,7 +172,14 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
 
   return (
     <div ref={wrapRef} className="w-full">
-      <svg width={size.w} height={size.h} className="overflow-visible">
+      <svg
+        ref={svgRef}
+        width={size.w}
+        height={size.h}
+        className="overflow-visible touch-none"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+      >
         {nodes.map((n) => {
           const fontSize = Math.max(11, Math.min(n.r / 2.4, 30));
           return (
