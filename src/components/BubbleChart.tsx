@@ -38,13 +38,20 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
 
   // 依詞頻換算半徑：用 sqrt 讓面積大致正比於次數。
   const seedNodes = useMemo<Node[]>(() => {
-    const max = Math.max(1, ...data.map((d) => d.count));
-    const minR = Math.max(18, size.w / 26);
-    const maxR = Math.max(minR + 10, size.w / 7);
+    const counts = data.map((d) => d.count);
+    const totalCount = counts.reduce((a, b) => a + b, 0) || 1;
+
+    // 依「容器面積」自動換算半徑：泡泡越多顆，每顆就越小，總面積維持在容器的一定比例內，
+    // 這樣不管 1 顆還是 30 顆都不會爆出框。半徑正比於 sqrt(count)（面積正比於 count）。
+    const fill = 0.62; // 泡泡總面積約佔容器的 62%
+    const k = Math.sqrt((fill * size.w * size.h) / (Math.PI * totalCount));
+    const minR = Math.max(16, Math.min(size.w, size.h) / 16);
+    const maxR = Math.min(size.w, size.h) / 3;
+
     return data.map((d) => ({
       text: d.text,
       count: d.count,
-      r: minR + (maxR - minR) * Math.sqrt(d.count / max),
+      r: Math.max(minR, Math.min(maxR, k * Math.sqrt(d.count))),
       x: size.w / 2 + (Math.random() - 0.5) * 40,
       y: size.h / 2 + (Math.random() - 0.5) * 40,
     }));
@@ -56,13 +63,22 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
       setNodes([]);
       return;
     }
+    const pad = 4;
+    const clamp = (n: Node) => {
+      // 把每顆泡泡夾在容器邊界內，避免被切到框外（跑版）。
+      n.x = Math.max(n.r + pad, Math.min(size.w - n.r - pad, n.x ?? size.w / 2));
+      n.y = Math.max(n.r + pad, Math.min(size.h - n.r - pad, n.y ?? size.h / 2));
+    };
     const sim = forceSimulation<Node>(seedNodes)
-      .force("charge", forceManyBody().strength(5))
+      .force("charge", forceManyBody().strength(3))
       .force("center", forceCenter(size.w / 2, size.h / 2))
-      .force("x", forceX(size.w / 2).strength(0.05))
-      .force("y", forceY(size.h / 2).strength(0.05))
-      .force("collide", forceCollide<Node>((d) => d.r + 4).iterations(3))
-      .on("tick", () => setNodes([...sim.nodes()]));
+      .force("x", forceX(size.w / 2).strength(0.08))
+      .force("y", forceY(size.h / 2).strength(0.12))
+      .force("collide", forceCollide<Node>((d) => d.r + 3).iterations(4))
+      .on("tick", () => {
+        for (const n of sim.nodes()) clamp(n);
+        setNodes([...sim.nodes()]);
+      });
     sim.alpha(1).restart();
     return () => {
       sim.stop();
