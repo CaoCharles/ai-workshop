@@ -17,7 +17,16 @@ type Node = SimulationNodeDatum & {
   r: number;
 };
 
-const PALETTE = ["#0E5A38", "#1C8B5A", "#37A871", "#0a3a26", "#5aa17a"];
+// 次數越多 → 顏色越深。在「淺綠」與「深綠」之間做線性內插。
+const COLOR_LIGHT = [0x6f, 0xc1, 0x97]; // 淺綠（次數最少）
+const COLOR_DARK = [0x0a, 0x3a, 0x26]; // 深綠（次數最多）
+
+function colorForCount(count: number, min: number, max: number): string {
+  const t = max === min ? 0.6 : (count - min) / (max - min);
+  const ch = (i: number) =>
+    Math.round(COLOR_LIGHT[i] + (COLOR_DARK[i] - COLOR_LIGHT[i]) * t);
+  return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
+}
 
 export default function BubbleChart({ data }: { data: Bubble[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -97,14 +106,17 @@ export default function BubbleChart({ data }: { data: Bubble[] }) {
     );
   }
 
+  const minCount = Math.min(...data.map((d) => d.count));
+  const maxCount = Math.max(...data.map((d) => d.count));
+
   return (
     <div ref={wrapRef} className="w-full">
       <svg width={size.w} height={size.h} className="overflow-visible">
-        {nodes.map((n, i) => {
+        {nodes.map((n) => {
           const fontSize = Math.max(11, Math.min(n.r / 2.4, 30));
           return (
             <g key={n.text} transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}>
-              <circle r={n.r} fill={PALETTE[i % PALETTE.length]} opacity={0.9} />
+              <circle r={n.r} fill={colorForCount(n.count, minCount, maxCount)} />
               <text
                 textAnchor="middle"
                 dominantBaseline="central"
