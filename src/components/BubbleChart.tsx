@@ -1,0 +1,119 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forceCenter,
+  forceCollide,
+  forceManyBody,
+  forceSimulation,
+  forceX,
+  forceY,
+  type SimulationNodeDatum,
+} from "d3-force";
+
+export type Bubble = { text: string; count: number };
+
+type Node = SimulationNodeDatum & {
+  text: string;
+  count: number;
+  r: number;
+};
+
+const PALETTE = ["#0E5A38", "#1C8B5A", "#37A871", "#0a3a26", "#5aa17a"];
+
+export default function BubbleChart({ data }: { data: Bubble[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 800, h: 560 });
+  const [nodes, setNodes] = useState<Node[]>([]);
+
+  // 監看容器寬度做 RWD。
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0].contentRect;
+      setSize({ w: cr.width, h: Math.max(420, Math.min(cr.width * 0.7, 640)) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 依詞頻換算半徑：用 sqrt 讓面積大致正比於次數。
+  const seedNodes = useMemo<Node[]>(() => {
+    const max = Math.max(1, ...data.map((d) => d.count));
+    const minR = Math.max(18, size.w / 26);
+    const maxR = Math.max(minR + 10, size.w / 7);
+    return data.map((d) => ({
+      text: d.text,
+      count: d.count,
+      r: minR + (maxR - minR) * Math.sqrt(d.count / max),
+      x: size.w / 2 + (Math.random() - 0.5) * 40,
+      y: size.h / 2 + (Math.random() - 0.5) * 40,
+    }));
+  }, [data, size.w, size.h]);
+
+  // 用 d3-force 做泡泡碰撞排列。
+  useEffect(() => {
+    if (seedNodes.length === 0) {
+      setNodes([]);
+      return;
+    }
+    const sim = forceSimulation<Node>(seedNodes)
+      .force("charge", forceManyBody().strength(5))
+      .force("center", forceCenter(size.w / 2, size.h / 2))
+      .force("x", forceX(size.w / 2).strength(0.05))
+      .force("y", forceY(size.h / 2).strength(0.05))
+      .force("collide", forceCollide<Node>((d) => d.r + 4).iterations(3))
+      .on("tick", () => setNodes([...sim.nodes()]));
+    sim.alpha(1).restart();
+    return () => {
+      sim.stop();
+    };
+  }, [seedNodes, size.w, size.h]);
+
+  if (data.length === 0) {
+    return (
+      <div
+        ref={wrapRef}
+        className="flex items-center justify-center text-brand-dark/40 text-lg"
+        style={{ height: 420 }}
+      >
+        還沒有人填寫，等第一個泡泡出現…
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapRef} className="w-full">
+      <svg width={size.w} height={size.h} className="overflow-visible">
+        {nodes.map((n, i) => {
+          const fontSize = Math.max(11, Math.min(n.r / 2.4, 30));
+          return (
+            <g key={n.text} transform={`translate(${n.x ?? 0}, ${n.y ?? 0})`}>
+              <circle r={n.r} fill={PALETTE[i % PALETTE.length]} opacity={0.9} />
+              <text
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="white"
+                fontSize={fontSize}
+                fontWeight={600}
+                style={{ pointerEvents: "none" }}
+              >
+                {n.text}
+              </text>
+              <text
+                textAnchor="middle"
+                dominantBaseline="central"
+                y={fontSize + 2}
+                fill="white"
+                fontSize={Math.max(9, fontSize * 0.6)}
+                opacity={0.85}
+                style={{ pointerEvents: "none" }}
+              >
+                {n.count}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}

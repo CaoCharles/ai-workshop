@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# 不要把環境變數 commit 上 GitHub
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+
+# 工作坊素材，不放進網站 repo
+*.pptx
+國泰AI工作坊_簡報模板.html
